@@ -86,11 +86,10 @@ let FB = [], IG = [], filter = "ALL";
 
 function toast(t){ const el=$("toast"); el.textContent=t; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),1400); }
 
-async function decode(str){
+function decode(str){
   const b64 = str.replace(/-/g,"+").replace(/_/g,"/");
   const bin = Uint8Array.from(atob(b64 + "===".slice((b64.length+3)%4)), c => c.charCodeAt(0));
-  const stream = new Blob([bin]).stream().pipeThrough(new DecompressionStream("deflate"));
-  return JSON.parse(await new Response(stream).text());
+  return JSON.parse(new TextDecoder().decode(bin));
 }
 
 function render(){
