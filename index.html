@@ -37,6 +37,7 @@
   .name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .uid{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:var(--hint);cursor:pointer}
   .note{font-size:13px;margin-top:3px;color:var(--hint)}
+  .owner{display:inline-block;margin-top:4px;font-size:11px;background:var(--acc);color:var(--acctx);padding:1px 7px;border-radius:8px}
   .meta{font-size:11.5px;color:var(--hint);margin-top:3px}
   .right{text-align:right;flex:none}
   .price{font-weight:600;font-variant-numeric:tabular-nums}
@@ -100,19 +101,21 @@ function render(){
       const st = ST[a.s] || "UNK";
       return `<li class="${st}"><div class="dot"></div><div class="main">
         <div class="name">@${esc(a.u)}</div>${a.n ? `<div class="note">📝 ${esc(a.n)}</div>` : ""}
-        <div class="meta">Kiểm tra: ${esc(a.t||"—")}</div></div>
+        <div class="meta">Kiểm tra: ${esc(a.t||"—")}</div>
+        ${a.w ? `<span class="owner">👤 ${esc(a.w)}</span>` : ""}</div>
         <div class="right"><div class="st">${st==="LIVE"?"SỐNG":st==="DIE"?"DIE":"?"}</div>
         <a class="open" href="https://instagram.com/${encodeURIComponent(a.u)}" target="_blank">Mở ↗</a></div></li>`;
     });
   } else {
     rows = FB.filter(a => (filter==="ALL" || ST[a.s]===filter) &&
-      (!q || (a.u+" "+(a.n||"")+" "+(a.o||"")).toLowerCase().includes(q))).map(a => {
+      (!q || (a.u+" "+(a.n||"")+" "+(a.o||"")+" "+(a.w||"")).toLowerCase().includes(q))).map(a => {
       const st = ST[a.s] || "UNK";
       return `<li class="${st}"><div class="dot"></div><div class="main">
         <div class="name">${esc(a.n||a.u)}</div>
         <div class="uid" data-copy="${esc(a.u)}">${esc(a.u)} ⧉</div>
         ${a.o ? `<div class="note">📝 ${esc(a.o)}</div>` : ""}
-        <div class="meta">Kiểm tra: ${esc(a.t||"—")}${a.c ? ` · Đổi: ${esc(a.c)}` : ""}</div></div>
+        <div class="meta">Kiểm tra: ${esc(a.t||"—")}${a.c ? ` · Đổi: ${esc(a.c)}` : ""}</div>
+        ${a.w ? `<span class="owner">👤 ${esc(a.w)}</span>` : ""}</div>
         <div class="right"><div class="price">${money(a.p)}</div>
         <div class="st">${st==="LIVE"?"SỐNG":st==="DIE"?"DIE":"?"}</div>
         <a class="open" href="https://facebook.com/${encodeURIComponent(a.u)}" target="_blank">Mở ↗</a></div></li>`;
@@ -139,7 +142,8 @@ $("list").onclick = e => {
   try {
     const d = await decode(h);
     FB = d.f || []; IG = d.i || [];
-    $("sub").textContent = "Cập nhật lúc " + d.t;
+    const adminView = FB.some(a => a.w) || IG.some(a => a.w);
+    $("sub").textContent = (adminView ? "👑 Chế độ admin · tất cả UID · " : "") + "Cập nhật lúc " + d.t;
     $("sTotal").textContent = FB.length;
     $("sLive").textContent = FB.filter(a => a.s === 1).length;
     $("sDie").textContent = FB.filter(a => a.s === 0).length;
