@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Theo dõi Facebook</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --bg:var(--tg-theme-bg-color,#17212b); --bg2:var(--tg-theme-secondary-bg-color,#0e1621);
+    --tx:var(--tg-theme-text-color,#f5f5f5); --hint:var(--tg-theme-hint-color,#8a9aa9);
+    --acc:var(--tg-theme-button-color,#5288c1); --acctx:var(--tg-theme-button-text-color,#fff);
+    --live:#3fb950; --die:#f85149; --unk:#8a9aa9;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg2);color:var(--tx);font-size:15px}
+  header{padding:16px 16px 8px}
+  h1{font-size:19px;font-weight:600}
+  .sub{color:var(--hint);font-size:12.5px;margin-top:2px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 16px}
+  .stat{background:var(--bg);border-radius:12px;padding:10px 12px}
+  .stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+  .stat span{font-size:12px;color:var(--hint)}
+  .stat.live b{color:var(--live)} .stat.die b{color:var(--die)}
+  .money{margin:0 16px 8px;background:var(--bg);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--hint);display:flex;justify-content:space-between}
+  .money b{color:var(--tx);font-variant-numeric:tabular-nums}
+  .tools{position:sticky;top:0;background:var(--bg2);padding:8px 16px;z-index:2}
+  input{width:100%;padding:10px 12px;border-radius:10px;border:none;background:var(--bg);color:var(--tx);font-size:15px;outline:none}
+  .tabs{display:flex;gap:6px;margin-top:8px}
+  .tab{flex:1;padding:7px 0;border-radius:9px;border:none;background:var(--bg);color:var(--hint);font-size:13px;cursor:pointer}
+  .tab.on{background:var(--acc);color:var(--acctx)}
+  ul{list-style:none;padding:4px 16px 24px}
+  li{background:var(--bg);border-radius:12px;padding:11px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start}
+  .dot{width:10px;height:10px;border-radius:50%;margin-top:6px;flex:none}
+  .LIVE .dot{background:var(--live)} .DIE .dot{background:var(--die)} .UNK .dot{background:var(--unk)}
+  .main{flex:1;min-width:0}
+  .name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .uid{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:var(--hint);cursor:pointer}
+  .note{font-size:13px;margin-top:3px;color:var(--hint)}
+  .meta{font-size:11.5px;color:var(--hint);margin-top:3px}
+  .right{text-align:right;flex:none}
+  .price{font-weight:600;font-variant-numeric:tabular-nums}
+  .st{font-size:12px;font-weight:600}
+  .LIVE .st{color:var(--live)} .DIE .st{color:var(--die)} .UNK .st{color:var(--unk)}
+  a.open{display:inline-block;margin-top:4px;font-size:12px;color:var(--acc);text-decoration:none}
+  .empty{text-align:center;color:var(--hint);padding:40px 16px}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#000c;color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .warn{margin:0 16px 8px;padding:8px 12px;border-radius:10px;background:#f8514922;color:var(--die);font-size:12.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Theo dõi Facebook</h1>
+  <div class="sub" id="sub">Đang tải…</div>
+</header>
+<div class="stats">
+  <div class="stat"><b id="sTotal">0</b><span>Tổng</span></div>
+  <div class="stat live"><b id="sLive">0</b><span>🟢 Sống</span></div>
+  <div class="stat die"><b id="sDie">0</b><span>🔴 Die</span></div>
+</div>
+<div class="money"><span>💰 Tổng giá nick sống</span><b id="sMoney">0đ</b></div>
+<div id="warn"></div>
+<div class="tools">
+  <input id="q" placeholder="🔍 Tìm UID, tên, ghi chú…" autocomplete="off">
+  <div class="tabs">
+    <button class="tab on" data-f="ALL">Tất cả</button>
+    <button class="tab" data-f="LIVE">Sống</button>
+    <button class="tab" data-f="DIE">Die</button>
+    <button class="tab" data-f="IG">Instagram</button>
+  </div>
+</div>
+<ul id="list"></ul>
+<div class="toast" id="toast"></div>
+
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = n => n ? n.toLocaleString("vi-VN") + "đ" : "";
+const ST = {1:"LIVE", 0:"DIE"};
+let FB = [], IG = [], filter = "ALL";
+
+function toast(t){ const el=$("toast"); el.textContent=t; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),1400); }
+
+async function decode(str){
+  const b64 = str.replace(/-/g,"+").replace(/_/g,"/");
+  const bin = Uint8Array.from(atob(b64 + "===".slice((b64.length+3)%4)), c => c.charCodeAt(0));
+  const stream = new Blob([bin]).stream().pipeThrough(new DecompressionStream("deflate"));
+  return JSON.parse(await new Response(stream).text());
+}
+
+function render(){
+  const q = $("q").value.trim().toLowerCase();
+  let rows;
+  if (filter === "IG") {
+    rows = IG.filter(a => !q || (a.u + " " + (a.n||"")).toLowerCase().includes(q)).map(a => {
+      const st = ST[a.s] || "UNK";
+      return `<li class="${st}"><div class="dot"></div><div class="main">
+        <div class="name">@${esc(a.u)}</div>${a.n ? `<div class="note">📝 ${esc(a.n)}</div>` : ""}
+        <div class="meta">Kiểm tra: ${esc(a.t||"—")}</div></div>
+        <div class="right"><div class="st">${st==="LIVE"?"SỐNG":st==="DIE"?"DIE":"?"}</div>
+        <a class="open" href="https://instagram.com/${encodeURIComponent(a.u)}" target="_blank">Mở ↗</a></div></li>`;
+    });
+  } else {
+    rows = FB.filter(a => (filter==="ALL" || ST[a.s]===filter) &&
+      (!q || (a.u+" "+(a.n||"")+" "+(a.o||"")).toLowerCase().includes(q))).map(a => {
+      const st = ST[a.s] || "UNK";
+      return `<li class="${st}"><div class="dot"></div><div class="main">
+        <div class="name">${esc(a.n||a.u)}</div>
+        <div class="uid" data-copy="${esc(a.u)}">${esc(a.u)} ⧉</div>
+        ${a.o ? `<div class="note">📝 ${esc(a.o)}</div>` : ""}
+        <div class="meta">Kiểm tra: ${esc(a.t||"—")}${a.c ? ` · Đổi: ${esc(a.c)}` : ""}</div></div>
+        <div class="right"><div class="price">${money(a.p)}</div>
+        <div class="st">${st==="LIVE"?"SỐNG":st==="DIE"?"DIE":"?"}</div>
+        <a class="open" href="https://facebook.com/${encodeURIComponent(a.u)}" target="_blank">Mở ↗</a></div></li>`;
+    });
+  }
+  $("list").innerHTML = rows.length ? rows.join("") : `<div class="empty">Không có tài khoản nào.</div>`;
+}
+
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); filter = b.dataset.f; render();
+});
+$("q").oninput = render;
+$("list").onclick = e => {
+  const c = e.target.closest("[data-copy]");
+  if (c) { navigator.clipboard?.writeText(c.dataset.copy); toast("Đã copy UID"); }
+  const a = e.target.closest("a.open");
+  if (a && tg) { e.preventDefault(); tg.openLink(a.href); }
+};
+
+(async () => {
+  const h = location.hash.slice(1);
+  if (!h) { $("sub").textContent = "Mở trang này bằng lệnh /app trong bot."; render(); return; }
+  try {
+    const d = await decode(h);
+    FB = d.f || []; IG = d.i || [];
+    $("sub").textContent = "Cập nhật lúc " + d.t;
+    $("sTotal").textContent = FB.length;
+    $("sLive").textContent = FB.filter(a => a.s === 1).length;
+    $("sDie").textContent = FB.filter(a => a.s === 0).length;
+    $("sMoney").textContent = money(FB.filter(a => a.s === 1).reduce((s,a) => s + (a.p||0), 0)) || "0đ";
+    if (d.x) $("warn").innerHTML = `<div class="warn">⚠️ Danh sách dài nên chỉ hiển thị ${FB.length}/${d.x} tài khoản. Dùng /list trong bot để xem đủ.</div>`;
+  } catch (e) {
+    $("sub").textContent = "Không đọc được dữ liệu. Gõ /app lại trong bot.";
+  }
+  render();
+})();
+</script>
+</body>
+</html>
